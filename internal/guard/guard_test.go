@@ -36,3 +36,9 @@ func TestGuard(t *testing.T) {
 		}
 	}
 }
+
+func TestGuardAllowsGitkeep(t *testing.T) {
+	if got := Check("personas/.gitkeep", nil); len(got) != 0 {
+		t.Fatalf("gitkeep refused: %v", got)
+	}
+}

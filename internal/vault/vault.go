@@ -184,16 +184,28 @@ func Ensure(dir, source string) (*Vault, string, error) {
 			return nil, "", fmt.Errorf("git clone %s: %w", source, err)
 		}
 		note = "cloned " + source
-	} else {
+	} else if hasUpstream(dir) {
 		cmd := exec.Command("git", "-C", dir, "pull", "--ff-only", "--quiet")
 		if out, err := cmd.CombinedOutput(); err != nil {
-			note = "could not update vault: " + strings.TrimSpace(string(out))
+			note = "could not update vault: " + firstLine(string(out))
 		} else {
 			note = "vault up to date"
 		}
 	}
 	v, err := Open(dir)
 	return v, note, err
+}
+
+func hasUpstream(dir string) bool {
+	return exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}").Run() == nil
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // Remote returns the origin URL of the vault checkout, or empty.

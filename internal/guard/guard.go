@@ -43,6 +43,9 @@ func Check(relPath string, content []byte) []Finding {
 			add("contains private key material (" + string(m) + ")")
 		}
 	}
+	if rel == "personas/.gitkeep" {
+		return out
+	}
 	if strings.HasPrefix(rel, "personas/") {
 		parts := strings.Split(rel, "/")
 		if len(parts) != 3 {

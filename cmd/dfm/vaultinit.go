@@ -22,13 +22,21 @@ func cmdVault(args []string) error {
 	dotInstall := fs.String("dotfiles-install", "", "command to run inside the dotfiles checkout")
 	vaultURL := fs.String("vault-url", "", "public clone URL of this vault, used by install.sh")
 	toolRepo := fs.String("tool-repo", "JonasHess/dotfile-manager", "GitHub repo that publishes dfm releases")
-	if err := fs.Parse(args[1:]); err != nil {
+	// Accept the directory before or after the flags.
+	rest := args[1:]
+	dir := ""
+	if len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+		dir, rest = rest[0], rest[1:]
+	}
+	if err := fs.Parse(rest); err != nil {
 		return nil
 	}
-	if fs.NArg() != 1 {
+	if dir == "" && fs.NArg() == 1 {
+		dir = fs.Arg(0)
+	}
+	if dir == "" || fs.NArg() > 1 {
 		return errors.New("vault init needs exactly one DIR")
 	}
-	dir := fs.Arg(0)
 	if _, err := os.Stat(filepath.Join(dir, "vault.toml")); err == nil {
 		return fmt.Errorf("%s already contains a vault.toml", dir)
 	}
@@ -139,7 +147,7 @@ fi
 # Fallback without the binary: a conservative text check.
 status=0
 for f in $(git diff --cached --name-only --diff-filter=ACMR); do
-  if git show ":$f" | grep -qE 'PRIVATE KEY-----|AGE-SECRET-KEY-'; then
+  if git show ":$f" | grep -qE "PRIVATE KEY""-----|AGE-SECRET""-KEY-"; then
     echo "guard: $f contains private key material" >&2; status=1
   fi
   case "$f" in
