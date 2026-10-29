@@ -1,0 +1,6 @@
+notes-local/
+dist/
+*.plain
+id_ed25519*
+id_rsa*
+*.age.tmp
