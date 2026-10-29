@@ -1,0 +1,21 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+      - run: make dist VERSION=${GITHUB_REF_NAME}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/dfm-*
+            dist/SHA256SUMS

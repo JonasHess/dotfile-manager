@@ -38,7 +38,7 @@ Usage:
             [--protected|--unprotected] [--accounts root,user] [--harden]
             [--git-name NAME --git-email MAIL] [--default-github]
   dfm persona list|new|verify|rotate|passphrase|publish [NAME]
-  dfm cleanup                                    find and remove legacy keys
+  dfm cleanup [--remove]                         find (and remove, with backups) legacy keys
   dfm doctor                                     health and lock-out checks
   dfm guard [--staged] [FILE...]                 secret guard (pre-commit, CI)
   dfm vault init DIR [--owner USER] [--dotfiles-repo URL]   create a new vault
@@ -106,7 +106,7 @@ func run(args []string) error {
 	case "persona":
 		return a.cmdPersona(rest)
 	case "cleanup":
-		return a.cmdCleanup()
+		return a.cmdCleanup(rest...)
 	case "doctor":
 		return a.cmdDoctor()
 	default:

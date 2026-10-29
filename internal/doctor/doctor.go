@@ -51,13 +51,14 @@ func Run(plat platform.Info, paths state.Paths, st *state.State, v *vault.Vault,
 		}
 	}
 
+	needsInclude := st.HasRole("github") || st.HasRole("client")
 	if b, err := os.ReadFile(paths.UserCfg); err != nil {
-		if len(st.Personas) > 0 {
+		if needsInclude {
 			add(Warn, "%s missing; the generated fragment is not included", paths.UserCfg)
 		}
 	} else if sshconfig.HasInclude(string(b)) {
 		add(OK, "Include dfm/config present at the top of %s", paths.UserCfg)
-	} else if len(st.Personas) > 0 {
+	} else if needsInclude {
 		add(Warn, "%s lacks 'Include dfm/config' before the first Host block", paths.UserCfg)
 	}
 

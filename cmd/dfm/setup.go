@@ -264,7 +264,8 @@ func (a *app) scanLegacy() []cleanup.Finding {
 	return cleanup.Scan(a.plat, a.paths, a.vault, personas)
 }
 
-func (a *app) cmdCleanup() error {
+func (a *app) cmdCleanup(args ...string) error {
+	removeAll := len(args) > 0 && args[0] == "--remove"
 	findings := a.scanLegacy()
 	ui.Section("Old material on this machine")
 	if len(findings) == 0 {
@@ -277,11 +278,25 @@ func (a *app) cmdCleanup() error {
 			keep = p.Env["admin_fingerprint"]
 		}
 	}
+	if removeAll {
+		if a.plat.IsSSH {
+			ui.Report("warn", "you are connected over SSH: removals affect new sessions, keep this one open until a new login works")
+		}
+		for _, f := range findings {
+			res, err := cleanup.Remove(f, a.paths.BackupDir, keep)
+			if err != nil {
+				ui.Report("fail", "%s: %v", f.Path, err)
+				continue
+			}
+			ui.Report("ok", "%s: %s", f.Path, res)
+		}
+		return nil
+	}
 	if a.yes {
 		for _, f := range findings {
 			ui.Report("info", "%s", f)
 		}
-		return errors.New("cleanup needs confirmation; run without --yes")
+		return errors.New("cleanup needs confirmation; run without --yes, or pass --remove to remove everything listed (with backups)")
 	}
 	return a.cleanupInteractive(findings, keep)
 }

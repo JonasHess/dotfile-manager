@@ -126,6 +126,10 @@ func (c *Context) Harden(adminFingerprint string, accounts []string) error {
 	if !c.Plat.IsRoot && !c.Plat.HasSudo {
 		return errors.New("hardening needs root or sudo")
 	}
+	if c.WaitEnter == nil {
+		c.report(Skip, "hardening needs an interactive run: the new key's login must be proven first")
+		return nil
+	}
 	c.report(Info, "Before password login is switched off, prove the new key works.")
 	host := c.Plat.Hostname
 	acc := c.Plat.User
