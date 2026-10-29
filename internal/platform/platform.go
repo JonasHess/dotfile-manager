@@ -22,9 +22,9 @@ type Info struct {
 	Home      string
 	IsRoot    bool
 	IsWSL     bool
-	IsSSH     bool // the current session arrived over SSH
-	HasSudo   bool // sudo binary exists (not whether it is passwordless)
-	Headless  bool // no graphical session detected
+	IsSSH     bool   // the current session arrived over SSH
+	HasSudo   bool   // sudo binary exists (not whether it is passwordless)
+	Headless  bool   // no graphical session detected
 	PkgMgr    string // brew, apt, dnf, pacman, apk, or empty
 	AgentSock string // SSH_AUTH_SOCK, empty when no agent is advertised
 }

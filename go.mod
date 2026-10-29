@@ -4,6 +4,7 @@ go 1.27.3
 
 require (
 	filippo.io/age v1.3.2
+	github.com/BurntSushi/toml v1.6.0
 	golang.org/x/crypto v0.58.0
 )
 
