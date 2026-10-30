@@ -177,7 +177,11 @@ func (c *Context) VerifyGithub(u *persona.Unlocked) (string, error) {
 	for attempt := 1; ; attempt++ {
 		login, err := github.Check(u.Github.Signer())
 		if err == nil {
-			c.report(OK, "ssh -T git@github.com: Hi %s!", login)
+			if login == "" {
+				c.report(OK, "ssh -T git@github.com: authenticated")
+			} else {
+				c.report(OK, "ssh -T git@github.com: Hi %s!", login)
+			}
 			return login, nil
 		}
 		if err != github.ErrRejected {

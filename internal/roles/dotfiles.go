@@ -31,12 +31,22 @@ func (c *Context) Dotfiles() error {
 		}
 		repo = https
 	}
+	git := func(args ...string) *exec.Cmd {
+		cmd := exec.Command("git", args...)
+		cmd.Env = os.Environ()
+		if c.Confirm == nil {
+			// Non-interactive runs (for example the setup of a second account)
+			// must not stall on an ssh passphrase prompt; fail and report instead.
+			cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes", "GIT_TERMINAL_PROMPT=0")
+		}
+		return cmd
+	}
 	if _, err := os.Stat(filepath.Join(target, ".git")); err == nil {
 		c.report(OK, "%s already exists, pulling", target)
-		if out, err := exec.Command("git", "-C", target, "pull", "--ff-only", "--quiet").CombinedOutput(); err != nil {
-			c.report(Warn, "git pull: %s", strings.TrimSpace(string(out)))
+		if out, err := git("-C", target, "pull", "--ff-only", "--quiet").CombinedOutput(); err != nil {
+			c.report(Warn, "git pull: %s", firstLine(string(out)))
 		}
-		if out, err := exec.Command("git", "-C", target, "submodule", "update", "--init", "--recursive", "--quiet").CombinedOutput(); err != nil {
+		if out, err := git("-C", target, "submodule", "update", "--init", "--recursive", "--quiet").CombinedOutput(); err != nil {
 			c.report(Warn, "git submodule update: %s", strings.TrimSpace(string(out)))
 		} else {
 			c.report(OK, "submodules up to date")
@@ -45,7 +55,7 @@ func (c *Context) Dotfiles() error {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		cmd := exec.Command("git", "clone", "--quiet", "--recurse-submodules", repo, target)
+		cmd := git("clone", "--quiet", "--recurse-submodules", repo, target)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("git clone %s: %w", repo, err)
@@ -178,6 +188,14 @@ func (c *Context) installPackage(name string) error {
 	}
 	c.report(OK, "%s installed", name)
 	return nil
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 func expandHome(p, home string) string {
