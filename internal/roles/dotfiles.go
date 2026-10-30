@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // Dotfiles clones the vault's dotfiles repo and runs its install command.
@@ -61,6 +63,11 @@ func (c *Context) Dotfiles() error {
 	if !c.confirm(fmt.Sprintf("Run the dotfiles install command now?\n    %s", install), true) {
 		return nil
 	}
+	if strings.Contains(install, "stow ") {
+		if err := c.resolveStowConflicts(install, target); err != nil {
+			return err
+		}
+	}
 	cmd := exec.Command("sh", "-c", install)
 	cmd.Dir = target
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
@@ -68,6 +75,46 @@ func (c *Context) Dotfiles() error {
 		return fmt.Errorf("install command failed: %w", err)
 	}
 	c.report(OK, "dotfiles installed")
+	return nil
+}
+
+var stowConflictRe = regexp.MustCompile(`existing target is (?:neither a link nor a directory|not owned by stow): (.+)`)
+
+// resolveStowConflicts dry-runs the stow command, lists the files in the
+// target that would block it, and offers to move them into dfm's backup
+// directory so the real run succeeds. Stow never overwrites, so without
+// this step the install aborts on the first pre-existing dotfile.
+func (c *Context) resolveStowConflicts(install, dir string) error {
+	dry := strings.Replace(install, "stow ", "stow -n ", 1)
+	cmd := exec.Command("sh", "-c", dry)
+	cmd.Dir = dir
+	out, _ := cmd.CombinedOutput()
+	var conflicts []string
+	for _, m := range stowConflictRe.FindAllStringSubmatch(string(out), -1) {
+		conflicts = append(conflicts, strings.TrimSpace(m[1]))
+	}
+	if len(conflicts) == 0 {
+		return nil
+	}
+	c.report(Warn, "stow would stop on %d existing file(s) in %s:", len(conflicts), c.Paths.Home)
+	for _, rel := range conflicts {
+		c.report(Info, "  %s", filepath.Join(c.Paths.Home, rel))
+	}
+	backup := filepath.Join(c.Paths.BackupDir, time.Now().Format("20060102-150405"), "dotfiles")
+	if !c.confirm(fmt.Sprintf("Move them to %s so stow can link the repo versions?", backup), true) {
+		return errors.New("stow conflicts left in place; resolve them and rerun the dotfiles step")
+	}
+	for _, rel := range conflicts {
+		src := filepath.Join(c.Paths.Home, rel)
+		dst := filepath.Join(backup, rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			return err
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return fmt.Errorf("move %s: %w", src, err)
+		}
+		c.report(OK, "%s moved to %s", src, dst)
+	}
 	return nil
 }
 
