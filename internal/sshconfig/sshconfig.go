@@ -87,7 +87,19 @@ func EnsureInclude(userCfg string) (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(userCfg), 0o700); err != nil {
 		return false, err
 	}
-	return true, os.WriteFile(userCfg, []byte(content), 0o600)
+	return true, WriteOwned(userCfg, []byte(content), 0o600)
+}
+
+// WriteOwned writes a file the user owns even when an earlier tool left it
+// read-only (the old installer did chmod 400 on everything in ~/.ssh), by
+// lifting the mode first. Ownership is not changed.
+func WriteOwned(path string, data []byte, mode os.FileMode) error {
+	if st, err := os.Stat(path); err == nil && st.Mode().Perm()&0o200 == 0 {
+		if err := os.Chmod(path, mode); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, data, mode)
 }
 
 // HasInclude reports whether the Include line is present and precedes any

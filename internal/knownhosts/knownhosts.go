@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/JonasHess/dotfile-manager/internal/sshconfig"
 )
 
 // GitHub host keys as published at https://api.github.com/meta (ssh_keys).
@@ -55,7 +57,7 @@ func PinGitHub(path string) (int, error) {
 		out = append(out, '\n')
 	}
 	out = append(out, add.Bytes()...)
-	return n, os.WriteFile(path, out, 0o600)
+	return n, sshconfig.WriteOwned(path, out, 0o600)
 }
 
 // GitHubCallback verifies github.com against the pinned keys only, for the

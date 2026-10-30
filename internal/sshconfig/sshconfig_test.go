@@ -47,3 +47,15 @@ func TestEnsureInclude(t *testing.T) {
 		t.Fatal("include after a Host block must not count")
 	}
 }
+
+func TestEnsureIncludeOnReadOnlyFile(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "config")
+	os.WriteFile(cfg, []byte("Host foo\n"), 0o400)
+	if _, err := EnsureInclude(cfg); err != nil {
+		t.Fatalf("read-only config must be handled: %v", err)
+	}
+	st, _ := os.Stat(cfg)
+	if st.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", st.Mode())
+	}
+}
