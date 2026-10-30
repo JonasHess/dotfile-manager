@@ -80,7 +80,7 @@ func CheckAll(files map[string][]byte) []Finding {
 // Summary formats findings for the terminal.
 func Summary(fs []Finding) string {
 	if len(fs) == 0 {
-		return "guard: ok"
+		return "guard: ok\n"
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "guard: %d problem(s)\n", len(fs))
