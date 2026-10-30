@@ -231,6 +231,11 @@ func (a *app) setup(o setupOptions) error {
 		} else if err := a.cleanupInteractive(findings, p.Env["admin_fingerprint"]); err != nil {
 			ui.Report("warn", "%v", err)
 		}
+		if a.state.HasRole(roles.Github) || a.state.HasRole(roles.Client) {
+			if err := a.ctx.WriteConfig(); err != nil {
+				ui.Report("warn", "%v", err)
+			}
+		}
 	}
 	if contains(o.roles, roles.Dotfiles) {
 		ui.Section("Dotfiles")

@@ -52,8 +52,10 @@ func (c *Context) Dotfiles() error {
 	}
 	if strings.Contains(install, "stow") {
 		if _, err := exec.LookPath("stow"); err != nil {
-			c.report(Warn, "stow is not installed; install it with %s and rerun", stowHint(c.Plat.PkgMgr))
-			return nil
+			if err := c.installPackage("stow"); err != nil {
+				c.report(Warn, "stow is not installed and could not be installed: %v", err)
+				return nil
+			}
 		}
 	}
 	if !c.confirm(fmt.Sprintf("Run the dotfiles install command now?\n    %s", install), true) {
@@ -69,20 +71,44 @@ func (c *Context) Dotfiles() error {
 	return nil
 }
 
-func stowHint(pkg string) string {
-	switch pkg {
+// installPackage installs a package with the detected package manager,
+// via sudo when not root. Homebrew refuses to run as root, so it is used
+// as the invoking user.
+func (c *Context) installPackage(name string) error {
+	var args []string
+	switch c.Plat.PkgMgr {
 	case "brew":
-		return "brew install stow"
+		args = []string{"brew", "install", name}
 	case "apt":
-		return "apt-get install stow"
+		args = []string{"apt-get", "install", "-y", "-qq", name}
 	case "dnf":
-		return "dnf install stow"
+		args = []string{"dnf", "install", "-y", name}
 	case "pacman":
-		return "pacman -S stow"
+		args = []string{"pacman", "-S", "--noconfirm", name}
 	case "apk":
-		return "apk add stow"
+		args = []string{"apk", "add", name}
+	default:
+		return errors.New("no known package manager")
 	}
-	return "your package manager"
+	if c.Plat.PkgMgr != "brew" && !c.Plat.IsRoot {
+		if !c.Plat.HasSudo {
+			return errors.New("needs root or sudo")
+		}
+		args = append([]string{"sudo", "-n"}, args...)
+	}
+	if !c.confirm(fmt.Sprintf("%s is missing. Install it now?\n    %s", name, strings.Join(args, " ")), true) {
+		return errors.New("declined")
+	}
+	if c.Plat.PkgMgr == "apt" {
+		_ = exec.Command(args[0], append(args[1:len(args)-4], "update", "-qq")...).Run()
+	}
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	c.report(OK, "%s installed", name)
+	return nil
 }
 
 func expandHome(p, home string) string {

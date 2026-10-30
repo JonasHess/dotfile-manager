@@ -44,8 +44,9 @@ func TestScanAndRemove(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(paths.SSHDir, "id_rsa_JH_Github")); err == nil {
 		t.Fatal("legacy key still present")
 	}
-	if _, err := os.Stat(paths.UserCfg); err == nil {
-		t.Fatal("legacy config still present")
+	cfg, err := os.ReadFile(paths.UserCfg)
+	if err != nil || string(cfg) != "Include dfm/config\n" {
+		t.Fatalf("legacy config cleanup must keep the Include line, got %q (%v)", cfg, err)
 	}
 	if again := Scan(plat, paths, v, nil); len(again) != 0 {
 		t.Fatalf("second scan: %v", again)

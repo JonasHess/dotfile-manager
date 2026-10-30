@@ -22,6 +22,8 @@ func cmdVault(args []string) error {
 	dotInstall := fs.String("dotfiles-install", "", "command to run inside the dotfiles checkout")
 	vaultURL := fs.String("vault-url", "", "public clone URL of this vault, used by install.sh")
 	toolRepo := fs.String("tool-repo", "JonasHess/dotfile-manager", "GitHub repo that publishes dfm releases")
+	legacyComments := fs.String("legacy-comments", "", "comma separated authorized_keys comments that cleanup should find")
+	legacyKeys := fs.String("legacy-keys", "", "comma separated private key file names in ~/.ssh that cleanup should find")
 	// Accept the directory before or after the flags.
 	rest := args[1:]
 	dir := ""
@@ -62,9 +64,9 @@ install = %q
 
 [legacy]
 # What "Clean up old keys" looks for on machines set up before dfm.
-authorized_keys_comments = []
-private_keys = []
-`, *owner, *dotRepo, *dotInstall)
+authorized_keys_comments = %s
+private_keys = %s
+`, *owner, *dotRepo, *dotInstall, tomlList(*legacyComments), tomlList(*legacyKeys))
 
 	install := strings.ReplaceAll(strings.ReplaceAll(installTemplate, "__TOOL_REPO__", *toolRepo), "__VAULT_URL__", *vaultURL)
 	err := errors.Join(
@@ -87,6 +89,17 @@ private_keys = []
 	_ = exec.Command("git", "-C", dir, "config", "core.hooksPath", ".githooks").Run()
 	fmt.Printf("vault created in %s\n  vault.toml, install.sh, personas/, .githooks/pre-commit, .github/workflows/guard.yml\n  next: dfm --vault %s persona new\n", dir, dir)
 	return nil
+}
+
+// tomlList renders a comma separated flag value as a TOML string array.
+func tomlList(csv string) string {
+	var items []string
+	for _, s := range strings.Split(csv, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			items = append(items, fmt.Sprintf("%q", s))
+		}
+	}
+	return "[" + strings.Join(items, ", ") + "]"
 }
 
 // rawInstallURL derives the raw.githubusercontent.com URL of install.sh

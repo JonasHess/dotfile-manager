@@ -36,6 +36,11 @@ func (f Finding) String() string { return f.Path + "    " + f.Detail }
 
 // The exact ~/.ssh/config the old SSH_Public_Key installer wrote. Matching
 // the whole content means a user-edited config is never touched.
+const (
+	sshconfigInclude = "Include dfm/config"
+	includePrefix    = sshconfigInclude + "\n\n"
+)
+
 const oldInstallerConfig = "Host github.com\n  User git\n  Hostname github.com\n  IdentityFile ~/.ssh/id_rsa_JH_Github\n"
 
 // Scan looks for legacy material for the current user and, when root, for
@@ -77,7 +82,7 @@ func Scan(plat platform.Info, paths state.Paths, v *vault.Vault, personas []*vau
 		}
 	}
 	if b, err := os.ReadFile(paths.UserCfg); err == nil {
-		body := strings.TrimPrefix(string(b), "Include dfm/config\n\n")
+		body := strings.TrimPrefix(string(b), includePrefix)
 		if body == oldInstallerConfig {
 			out = append(out, Finding{Kind: LegacyConfig, Path: paths.UserCfg, Detail: "4-line config written by the old installer", files: []string{paths.UserCfg}})
 		}
@@ -104,7 +109,31 @@ func Remove(f Finding, backupDir, keep string) (string, error) {
 			return "", err
 		}
 		return fmt.Sprintf("%d line(s) removed, backup %s", removed, backup), nil
-	case PrivateKeyFile, LegacyConfig:
+	case LegacyConfig:
+		dir := filepath.Join(backupDir, time.Now().Format("20060102-150405"))
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		old, err := os.ReadFile(f.Path)
+		if err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(filepath.Join(dir, filepath.Base(f.Path)), old, 0o600); err != nil {
+			return "", err
+		}
+		// The Include line that pulls in the generated fragment must survive,
+		// otherwise removing the old config cuts the new keys off as well.
+		if strings.HasPrefix(string(old), includePrefix) {
+			if err := os.WriteFile(f.Path, []byte(sshconfigInclude+"\n"), 0o600); err != nil {
+				return "", err
+			}
+			return "old entries removed, Include kept, backup in " + dir, nil
+		}
+		if err := os.Remove(f.Path); err != nil {
+			return "", err
+		}
+		return "moved to " + dir, nil
+	case PrivateKeyFile:
 		dir := filepath.Join(backupDir, time.Now().Format("20060102-150405"))
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return "", err
