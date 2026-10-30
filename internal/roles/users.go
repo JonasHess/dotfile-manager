@@ -49,11 +49,11 @@ func (c *Context) SetupForUser(account string, args []string, passphrase []byte)
 	if err != nil {
 		return err
 	}
-	vaultDir, err := c.vaultFor(target)
+	vaultArg, err := c.vaultFor(target)
 	if err != nil {
 		return err
 	}
-	full := append([]string{bin, "--vault", vaultDir, "--yes", "--passphrase-fd", "0", "setup"}, args...)
+	full := append([]string{bin, "--vault", vaultArg, "--yes", "--passphrase-fd", "0", "setup"}, args...)
 
 	var cmd *exec.Cmd
 	switch {
@@ -121,11 +121,23 @@ func (c *Context) binaryFor(account string) (string, error) {
 	return SystemBinary, nil
 }
 
-// vaultFor makes sure the target account has its own vault checkout. The
-// current checkout is copied, because the target may not be able to clone
-// yet (a private vault over ssh needs the very key being installed).
+// vaultFor returns the --vault argument for a setup run as target. Root
+// copies its checkout into the account's home, because the account may not
+// be able to clone yet (a private vault over ssh needs the very key being
+// installed). A user handing work to root cannot write under /root, so root
+// gets the vault's https URL to clone itself, or, for other remotes, the
+// user's own checkout, which root can read.
 func (c *Context) vaultFor(target *user.User) (string, error) {
 	dir := vault.DefaultDir(target.HomeDir)
+	if !c.Plat.IsRoot {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return dir, nil
+		}
+		if remote := c.Vault.Remote(); strings.HasPrefix(remote, "https://") {
+			return remote, nil
+		}
+		return c.Vault.Dir, nil
+	}
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
 		return dir, nil
 	}
