@@ -36,7 +36,7 @@ Usage:
   dfm [--vault URL|DIR] [--yes] [--passphrase-fd N]   interactive main menu
   dfm setup --persona NAME --roles github,client,server,dotfiles
             [--protected|--unprotected] [--accounts root,user] [--harden]
-            [--git-name NAME --git-email MAIL] [--default-github]
+            [--git-name NAME --git-email MAIL] [--default-github] [--users root,jonas]
   dfm persona list|new|verify|rotate|passphrase|delete|publish [NAME]
   dfm cleanup [--remove]                         find (and remove, with backups) legacy keys
   dfm doctor                                     health and lock-out checks
@@ -120,6 +120,10 @@ func run(args []string) error {
 
 func newApp(vaultArg string, yes bool) (*app, error) {
 	a := &app{plat: platform.Detect(), yes: yes}
+	if a.plat.SudoMisuse() {
+		return nil, fmt.Errorf("started with sudo but HOME is %s, which belongs to %s: files would end up owned by root in that home.\n  Run dfm as %s without sudo, or as root with 'sudo -i' / 'sudo -H dfm'. dfm offers to set up both accounts in one run.",
+			a.plat.Home, a.plat.SudoUser, a.plat.SudoUser)
+	}
 	a.paths = state.NewPaths(a.plat.Home)
 	a.state = state.Load(a.paths.State)
 

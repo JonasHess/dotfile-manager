@@ -4,13 +4,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/JonasHess/dotfile-manager/internal/cleanup"
 	"github.com/JonasHess/dotfile-manager/internal/doctor"
 	"github.com/JonasHess/dotfile-manager/internal/persona"
 	"github.com/JonasHess/dotfile-manager/internal/roles"
+	"github.com/JonasHess/dotfile-manager/internal/sshd"
 	"github.com/JonasHess/dotfile-manager/internal/ui"
 	"github.com/JonasHess/dotfile-manager/internal/vault"
 )
@@ -25,6 +25,7 @@ type setupOptions struct {
 	gitName       string
 	gitEmail      string
 	defaultGithub bool
+	users         []string // further accounts to set up the same way
 }
 
 func (a *app) cmdSetup(args []string) error {
@@ -41,8 +42,13 @@ func (a *app) cmdSetup(args []string) error {
 	fs.StringVar(&o.gitName, "git-name", "", "git user.name to set")
 	fs.StringVar(&o.gitEmail, "git-email", "", "git user.email to set")
 	fs.BoolVar(&o.defaultGithub, "default-github", false, "make this persona own plain github.com")
+	var usersArg string
+	fs.StringVar(&usersArg, "users", "", "also set up these accounts the same way, comma separated (root, or home users when root)")
 	if err := fs.Parse(args); err != nil {
 		return nil
+	}
+	if usersArg != "" {
+		o.users = strings.Split(usersArg, ",")
 	}
 	if o.persona == "" || rolesArg == "" {
 		return errors.New("setup needs --persona and --roles")
@@ -64,6 +70,10 @@ func (a *app) cmdSetup(args []string) error {
 
 func (a *app) setupInteractive() error {
 	names, err := a.vault.List()
+	if err != nil {
+		return err
+	}
+	extra, err := a.chooseExtraUsers()
 	if err != nil {
 		return err
 	}
@@ -112,7 +122,7 @@ func (a *app) setupInteractive() error {
 	}
 
 	ui.Section("Set up this machine  (3/3)  Options")
-	o := setupOptions{persona: choice, roles: chosen, protected: true, accounts: []string{a.plat.User}}
+	o := setupOptions{persona: choice, roles: chosen, protected: true, accounts: []string{a.plat.User}, users: extra}
 	if contains(chosen, roles.Github) || contains(chosen, roles.Client) {
 		def := "protected"
 		hint := ""
@@ -134,12 +144,12 @@ func (a *app) setupInteractive() error {
 	}
 	if contains(chosen, roles.Server) {
 		accOpts := []ui.Option{{Key: a.plat.User, Label: a.plat.User, Hint: "current user"}}
-		pre := []string{a.plat.User}
+		pre := append([]string{a.plat.User}, extra...)
 		if a.plat.User != "root" && a.plat.IsRoot {
 			accOpts = append(accOpts, ui.Option{Key: "root", Label: "root"})
 		}
 		if a.plat.IsRoot {
-			for _, h := range homeUsers() {
+			for _, h := range roles.HomeUsers() {
 				if h != a.plat.User {
 					accOpts = append(accOpts, ui.Option{Key: h, Label: h})
 				}
@@ -205,6 +215,11 @@ func (a *app) setup(o setupOptions) error {
 		}
 	}
 	if contains(o.roles, roles.Server) {
+		if !a.plat.IsRoot && a.plat.HasSudo {
+			if err := (sshd.Runner{Sudo: true}).Warm(); err != nil {
+				ui.Report("warn", "sudo not available: sshd steps will be skipped (%v)", err)
+			}
+		}
 		if err := a.ctx.InstallAuthorizedKey(o.persona, p.AdminPub, o.accounts); err != nil {
 			return err
 		}
@@ -243,9 +258,80 @@ func (a *app) setup(o setupOptions) error {
 			ui.Report("warn", "%v", err)
 		}
 	}
+	for _, acc := range o.users {
+		if acc == a.plat.User {
+			continue
+		}
+		ui.Section(fmt.Sprintf("Set up account %s", acc))
+		if err := a.ctx.SetupForUser(acc, o.childArgs(), pass); err != nil {
+			ui.Report("warn", "setup for %s failed: %v", acc, err)
+		}
+	}
 	ui.Section("Done")
 	fmt.Println(" " + a.state.Summary())
 	return nil
+}
+
+// childArgs turns the answers into flags for a setup run as another account.
+// The server role stays with the privileged parent, which already edits
+// every account's authorized_keys itself.
+func (o setupOptions) childArgs() []string {
+	var rs []string
+	for _, r := range o.roles {
+		if r != roles.Server {
+			rs = append(rs, r)
+		}
+	}
+	if len(rs) == 0 {
+		rs = []string{roles.Client}
+	}
+	args := []string{"--persona", o.persona, "--roles", strings.Join(rs, ",")}
+	if o.protected {
+		args = append(args, "--protected")
+	} else {
+		args = append(args, "--unprotected")
+	}
+	if o.gitName != "" {
+		args = append(args, "--git-name", o.gitName)
+	}
+	if o.gitEmail != "" {
+		args = append(args, "--git-email", o.gitEmail)
+	}
+	return args
+}
+
+// chooseExtraUsers asks which other accounts get the same setup. Root is
+// offered every home user; a user with sudo is offered root. Each child
+// runs as its own account, which is what keeps ownership right.
+func (a *app) chooseExtraUsers() ([]string, error) {
+	var opts []ui.Option
+	switch {
+	case a.plat.IsRoot:
+		for _, h := range roles.HomeUsers() {
+			if h != a.plat.User {
+				opts = append(opts, ui.Option{Key: h, Label: h, Hint: "/home/" + h})
+			}
+		}
+	case a.plat.HasSudo:
+		opts = append(opts, ui.Option{Key: "root", Label: "root", Hint: "via sudo"})
+	}
+	if len(opts) == 0 {
+		return nil, nil
+	}
+	ui.Section("Set up this machine  (0/3)  Accounts")
+	ui.Report("info", "you are %s; this run sets up %s. Other accounts get their own run as themselves, so nothing in their home ends up owned by %s.", a.plat.User, a.plat.Home, a.plat.User)
+	opts = append([]ui.Option{{Key: "none", Label: "only " + a.plat.User}}, opts...)
+	chosen, err := ui.MultiSelect("Also set up", opts, []string{"none"})
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, c := range chosen {
+		if c != "none" {
+			out = append(out, c)
+		}
+	}
+	return out, nil
 }
 
 // unlock asks for the passphrase until the bundle opens or the user gives up.
@@ -383,15 +469,4 @@ func orderFirst(key string, opts []ui.Option) []ui.Option {
 		}
 	}
 	return opts
-}
-
-func homeUsers() []string {
-	var out []string
-	entries, _ := os.ReadDir("/home")
-	for _, e := range entries {
-		if e.IsDir() {
-			out = append(out, e.Name())
-		}
-	}
-	return out
 }

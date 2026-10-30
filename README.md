@@ -41,9 +41,13 @@ Prefer to read before you run? Clone the vault, read `install.sh`, run `sh insta
 
 Creating a persona generates the keys, encrypts the bundle, verifies it by decrypting again, prints the GitHub public key for you to register, and offers to commit and push using that very key. Push the vault to a public GitHub repository and you are done.
 
+## Which user runs it
+
+dfm sets up the home of the user it runs as. Run it as your normal user, without `sudo`, and tick `root` on the first wizard screen if root should get the same keys and dotfiles; or run it as root and tick your user there. Each extra account gets its own run as that account, so nothing in its home ends up owned by someone else. Starting dfm with plain `sudo` while HOME still points at your own home is refused for that reason; use `sudo -i` or `sudo -H dfm` if you really want a root-only run.
+
 ## Everything has a flag
 
-    dfm setup --persona private --roles github,client,server --unprotected --accounts root --yes
+    dfm setup --persona private --roles github,client,server --unprotected --accounts root --users jonas --yes
     dfm persona list | new NAME | verify NAME | rotate NAME | passphrase NAME | delete NAME
     dfm cleanup [--remove]
     dfm doctor

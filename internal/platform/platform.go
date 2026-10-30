@@ -27,6 +27,7 @@ type Info struct {
 	Headless  bool   // no graphical session detected
 	PkgMgr    string // brew, apt, dnf, pacman, apk, or empty
 	AgentSock string // SSH_AUTH_SOCK, empty when no agent is advertised
+	SudoUser  string // the invoking account when started through sudo
 }
 
 // Detect gathers platform facts. It never fails; unknown facts stay empty.
@@ -42,6 +43,7 @@ func Detect() Info {
 		in.Home = h
 	}
 	in.IsSSH = os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != ""
+	in.SudoUser = os.Getenv("SUDO_USER")
 	in.AgentSock = os.Getenv("SSH_AUTH_SOCK")
 	_, err := exec.LookPath("sudo")
 	in.HasSudo = err == nil
@@ -118,6 +120,13 @@ func macosPretty() string {
 		return "macOS"
 	}
 	return "macOS " + strings.TrimSpace(string(out))
+}
+
+// SudoMisuse reports the case where dfm runs as root through sudo while
+// HOME still points at the invoking user's home: every file would then be
+// written into that user's home owned by root.
+func (i Info) SudoMisuse() bool {
+	return i.IsRoot && i.SudoUser != "" && i.SudoUser != "root" && i.Home != "/root" && !strings.HasPrefix(i.Home, "/var/root")
 }
 
 // Summary is the one-line header used by the TUI.

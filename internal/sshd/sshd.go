@@ -60,7 +60,7 @@ func Query(useSudo bool) (*Effective, error) {
 	}
 	var cmd *exec.Cmd
 	if useSudo {
-		cmd = exec.Command("sudo", "-n", bin, "-T")
+		cmd = exec.Command("sudo", bin, "-T")
 	} else {
 		cmd = exec.Command(bin, "-T")
 	}
@@ -195,12 +195,25 @@ func EnsureService(run Runner, pkgMgr string) error {
 // Runner executes privileged operations, directly as root or via sudo.
 type Runner struct{ Sudo bool }
 
+// Warm asks sudo for its password up front, on the terminal, so later
+// privileged steps do not stall or fail halfway through a run.
+func (r Runner) Warm() error {
+	if !r.Sudo {
+		return nil
+	}
+	cmd := exec.Command("sudo", "-v")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
 func (r Runner) Cmd(name string, args ...string) ([]byte, error) {
 	if r.Sudo {
-		args = append([]string{"-n", name}, args...)
+		args = append([]string{name}, args...)
 		name = "sudo"
 	}
-	return exec.Command(name, args...).CombinedOutput()
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = os.Stdin // sudo may ask for a password
+	return cmd.CombinedOutput()
 }
 
 func (r Runner) WriteFile(path string, content []byte, mode os.FileMode) error {
@@ -210,7 +223,7 @@ func (r Runner) WriteFile(path string, content []byte, mode os.FileMode) error {
 		}
 		return os.WriteFile(path, content, mode)
 	}
-	cmd := exec.Command("sudo", "-n", "sh", "-c", fmt.Sprintf("mkdir -p %q && cat > %q && chmod %o %q", filepath.Dir(path), path, mode, path))
+	cmd := exec.Command("sudo", "sh", "-c", fmt.Sprintf("mkdir -p %q && cat > %q && chmod %o %q", filepath.Dir(path), path, mode, path))
 	cmd.Stdin = bytes.NewReader(content)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

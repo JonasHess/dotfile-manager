@@ -154,16 +154,18 @@ func (c *Context) installPackage(name string) error {
 		if !c.Plat.HasSudo {
 			return errors.New("needs root or sudo")
 		}
-		args = append([]string{"sudo", "-n"}, args...)
+		args = append([]string{"sudo"}, args...)
 	}
 	if !c.confirm(fmt.Sprintf("%s is missing. Install it now?\n    %s", name, strings.Join(args, " ")), true) {
 		return errors.New("declined")
 	}
 	if c.Plat.PkgMgr == "apt" {
-		_ = exec.Command(args[0], append(args[1:len(args)-4], "update", "-qq")...).Run()
+		upd := exec.Command(args[0], append(args[1:len(args)-4], "update", "-qq")...)
+		upd.Stdin = os.Stdin
+		_ = upd.Run()
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if err := cmd.Run(); err != nil {
 		return err
 	}

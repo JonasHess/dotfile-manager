@@ -25,17 +25,25 @@ grep -q "Host github.com" "$W/home/.ssh/dfm/config"
 HOME="$W/home" "$W/dfm" --vault "$W/vault" --yes doctor >/dev/null
 echo "host checks ok"
 
-cat > "$W/container.sh" <<'IN'
+cat > "$W/container.sh" <<IN
+PASS="$PASS"
+IN
+cat >> "$W/container.sh" <<'IN'
 set -u
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null && apt-get install -y -qq git openssh-client >/dev/null 2>&1
+useradd -m -s /bin/bash jonas
 mkdir -p /root/.ssh /run/sshd && chmod 700 /root/.ssh
 ssh-keygen -q -t rsa -b 2048 -N "" -C MainKey -f /root/mainkey
 for i in 1 2 3; do cat /root/mainkey.pub >> /root/.ssh/authorized_keys; done
 ssh-keygen -q -t rsa -b 2048 -N "" -f /root/.ssh/id_rsa_JH_Github
 printf 'Host github.com\n  User git\n  Hostname github.com\n  IdentityFile ~/.ssh/id_rsa_JH_Github\n' > /root/.ssh/config
-git config --global --add safe.directory /vault
-/dfm --vault /vault --yes setup --persona test --roles server --accounts root >/dev/null || exit 1
+git config --global --add safe.directory '*'
+echo "$PASS" | /dfm --vault /vault --yes --passphrase-fd 0 setup --persona test --roles client,server --unprotected --accounts root --users jonas >/dev/null 2>&1 || exit 1
+[ -z "$(find /home/jonas -user root)" ] || { echo "root-owned files in /home/jonas"; exit 1; }
+grep -q "persona.test.roles=client" /home/jonas/.ssh/dfm/state.env || exit 1
+[ -x /usr/local/bin/dfm ] || exit 1
+HOME=/home/jonas SUDO_USER=jonas /dfm --vault /vault --yes doctor >/dev/null 2>&1 && { echo "sudo misuse not refused"; exit 1; }
 grep -c "dfm:test:admin" /root/.ssh/authorized_keys | grep -q "^1$" || exit 1
 /dfm --vault /vault --yes cleanup --remove >/dev/null || exit 1
 grep -q MainKey /root/.ssh/authorized_keys && exit 1
