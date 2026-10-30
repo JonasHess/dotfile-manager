@@ -122,7 +122,7 @@ func (c *Context) ReportSSHD() *sshd.Effective {
 }
 
 // Harden disables password login after the lock-out guard passed.
-func (c *Context) Harden(adminFingerprint string, accounts []string) error {
+func (c *Context) Harden(personaName, adminFingerprint string, accounts []string) error {
 	if !c.Plat.IsRoot && !c.Plat.HasSudo {
 		return errors.New("hardening needs root or sudo")
 	}
@@ -136,7 +136,7 @@ func (c *Context) Harden(adminFingerprint string, accounts []string) error {
 	if len(accounts) > 0 {
 		acc = accounts[0]
 	}
-	c.report(Info, "From another machine run:  ssh -i ~/.ssh/dfm/<persona>/id_ed25519_admin %s@%s", acc, host)
+	c.report(Info, "From another machine run:  ssh -i ~/.ssh/dfm/%s/id_ed25519_admin %s@%s", personaName, acc, host)
 	if c.Plat.IsSSH {
 		c.report(Warn, "Your current session came in over SSH. Keep it open until the new login has worked.")
 	}

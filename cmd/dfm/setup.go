@@ -227,7 +227,7 @@ func (a *app) setup(o setupOptions) error {
 			ui.Report("warn", "%v", err)
 		}
 		if o.harden {
-			if err := a.ctx.Harden(p.Env["admin_fingerprint"], o.accounts); err != nil {
+			if err := a.ctx.Harden(o.persona, p.Env["admin_fingerprint"], o.accounts); err != nil {
 				ui.Report("warn", "hardening not applied: %v", err)
 			}
 		} else {

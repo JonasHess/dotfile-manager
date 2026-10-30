@@ -186,12 +186,12 @@ func (c *Context) GitIdentity(name, email string) error {
 		return nil
 	}
 	if name != "" {
-		if out, err := exec.Command("git", "config", "--global", "user.name", name).CombinedOutput(); err != nil {
+		if out, err := exec.Command("git", "config", "--global", "--replace-all", "user.name", name).CombinedOutput(); err != nil {
 			return fmt.Errorf("git config user.name: %s", strings.TrimSpace(string(out)))
 		}
 	}
 	if email != "" {
-		if out, err := exec.Command("git", "config", "--global", "user.email", email).CombinedOutput(); err != nil {
+		if out, err := exec.Command("git", "config", "--global", "--replace-all", "user.email", email).CombinedOutput(); err != nil {
 			return fmt.Errorf("git config user.email: %s", strings.TrimSpace(string(out)))
 		}
 	}
