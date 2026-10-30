@@ -167,7 +167,7 @@ func (a *app) setupInteractive() error {
 		o.harden = ui.Confirm("Disable password login? ("+hardenHint+")", false)
 	}
 	if contains(chosen, roles.Github) {
-		n, e := roles.CurrentGitIdentity()
+		n, e := roles.CurrentGitIdentity(a.plat.Home)
 		if ui.Confirm(fmt.Sprintf("Set git identity? (currently %q <%s>)", n, e), n == "" || e == "") {
 			o.gitName, _ = ui.Input("git user.name", n, nil)
 			o.gitEmail, _ = ui.Input("git user.email", e, nil)

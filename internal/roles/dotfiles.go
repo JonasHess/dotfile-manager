@@ -91,7 +91,10 @@ func (c *Context) Dotfiles() error {
 	return nil
 }
 
-var stowConflictRe = regexp.MustCompile(`existing target is (?:neither a link nor a directory|not owned by stow): (.+)`)
+// Stow phrases conflicts differently across versions: 2.3 says "existing
+// target is neither a link nor a directory: X", 2.4 says "cannot stow ...
+// over existing target X since neither a link nor a directory".
+var stowConflictRe = regexp.MustCompile(`existing target is (?:neither a link nor a directory|not owned by stow): (.+)|over existing target (\S+) since`)
 
 // resolveStowConflicts dry-runs the stow command, lists the files in the
 // target that would block it, and offers to move them into dfm's backup
@@ -104,7 +107,11 @@ func (c *Context) resolveStowConflicts(install, dir string) error {
 	out, _ := cmd.CombinedOutput()
 	var conflicts []string
 	for _, m := range stowConflictRe.FindAllStringSubmatch(string(out), -1) {
-		conflicts = append(conflicts, strings.TrimSpace(m[1]))
+		if m[1] != "" {
+			conflicts = append(conflicts, strings.TrimSpace(m[1]))
+		} else {
+			conflicts = append(conflicts, strings.TrimSpace(m[2]))
+		}
 	}
 	if len(conflicts) == 0 {
 		return nil
@@ -180,28 +187,49 @@ func expandHome(p, home string) string {
 	return p
 }
 
-// GitIdentity sets the global git user.name and user.email.
+// GitIdentity sets user.name and user.email in the file the user's setup
+// keeps them in: ~/.gitconfig.local when ~/.gitconfig is a symlink into a
+// dotfiles repo or includes that file, otherwise ~/.gitconfig itself.
+// Writing into a stowed .gitconfig would dirty the dotfiles repo.
 func (c *Context) GitIdentity(name, email string) error {
 	if name == "" && email == "" {
 		return nil
 	}
-	if name != "" {
-		if out, err := exec.Command("git", "config", "--global", "--replace-all", "user.name", name).CombinedOutput(); err != nil {
-			return fmt.Errorf("git config user.name: %s", strings.TrimSpace(string(out)))
+	file := GitIdentityFile(c.Paths.Home)
+	for key, val := range map[string]string{"user.name": name, "user.email": email} {
+		if val == "" {
+			continue
+		}
+		if out, err := exec.Command("git", "config", "--file", file, "--replace-all", key, val).CombinedOutput(); err != nil {
+			return fmt.Errorf("git config %s: %s", key, strings.TrimSpace(string(out)))
 		}
 	}
-	if email != "" {
-		if out, err := exec.Command("git", "config", "--global", "--replace-all", "user.email", email).CombinedOutput(); err != nil {
-			return fmt.Errorf("git config user.email: %s", strings.TrimSpace(string(out)))
-		}
-	}
-	c.report(OK, "git identity set to %s <%s>", name, email)
+	c.report(OK, "git identity set to %s <%s> in %s", name, email, file)
 	return nil
 }
 
-// CurrentGitIdentity reads the existing global values, for prefilling.
-func CurrentGitIdentity() (name, email string) {
-	n, _ := exec.Command("git", "config", "--global", "user.name").Output()
-	e, _ := exec.Command("git", "config", "--global", "user.email").Output()
-	return strings.TrimSpace(string(n)), strings.TrimSpace(string(e))
+// GitIdentityFile picks ~/.gitconfig.local when ~/.gitconfig is managed by
+// dotfiles (a symlink, or it includes ~/.gitconfig.local), else ~/.gitconfig.
+func GitIdentityFile(home string) string {
+	cfg := filepath.Join(home, ".gitconfig")
+	local := filepath.Join(home, ".gitconfig.local")
+	if st, err := os.Lstat(cfg); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return local
+	}
+	if b, err := os.ReadFile(cfg); err == nil && strings.Contains(string(b), ".gitconfig.local") {
+		return local
+	}
+	return cfg
+}
+
+// CurrentGitIdentity reads the effective values from the home directory,
+// which follows includes (the --global form does not).
+func CurrentGitIdentity(home string) (name, email string) {
+	get := func(key string) string {
+		cmd := exec.Command("git", "config", "--get", key)
+		cmd.Dir = home
+		out, _ := cmd.Output()
+		return strings.TrimSpace(string(out))
+	}
+	return get("user.name"), get("user.email")
 }
