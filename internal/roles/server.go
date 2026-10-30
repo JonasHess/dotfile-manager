@@ -15,6 +15,7 @@ import (
 
 	"github.com/JonasHess/dotfile-manager/internal/authkeys"
 	"github.com/JonasHess/dotfile-manager/internal/keys"
+	"github.com/JonasHess/dotfile-manager/internal/platform"
 	"github.com/JonasHess/dotfile-manager/internal/sshd"
 )
 
@@ -131,7 +132,10 @@ func (c *Context) Harden(personaName, adminFingerprint string, accounts []string
 		return nil
 	}
 	c.report(Info, "Before password login is switched off, prove the new key works.")
-	host := c.Plat.Hostname
+	host := platform.ReachableAddress()
+	if host == "" {
+		host = c.Plat.Hostname
+	}
 	acc := c.Plat.User
 	if len(accounts) > 0 {
 		acc = accounts[0]

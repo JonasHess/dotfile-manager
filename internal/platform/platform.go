@@ -5,6 +5,7 @@ package platform
 
 import (
 	"bufio"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -120,6 +121,25 @@ func macosPretty() string {
 		return "macOS"
 	}
 	return "macOS " + strings.TrimSpace(string(out))
+}
+
+// ReachableAddress returns an IP other machines can use to reach this one:
+// the address the current SSH session connected to, when there is one,
+// otherwise the first non-loopback IPv4 address. Empty when none is found.
+func ReachableAddress() string {
+	if f := strings.Fields(os.Getenv("SSH_CONNECTION")); len(f) == 4 {
+		return f[2]
+	}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		if ipn, ok := a.(*net.IPNet); ok && !ipn.IP.IsLoopback() && ipn.IP.To4() != nil {
+			return ipn.IP.String()
+		}
+	}
+	return ""
 }
 
 // SudoMisuse reports the case where dfm runs as root through sudo while
