@@ -92,6 +92,9 @@ func (a *app) setupInteractive() error {
 
 	ui.Section(fmt.Sprintf("Set up this machine  (2/3)  Roles for persona %q", choice))
 	pre := a.state.Personas[choice]
+	if len(pre) == 0 {
+		pre = []string{roles.Github}
+	}
 	chosen, err := ui.MultiSelect("Roles", []ui.Option{
 		{Key: roles.Github, Label: "github", Hint: "pull and push repos with the GitHub key"},
 		{Key: roles.Client, Label: "client", Hint: "ssh into your machines with the admin key"},

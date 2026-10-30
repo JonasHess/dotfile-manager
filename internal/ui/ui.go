@@ -6,6 +6,7 @@ package ui
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -94,7 +95,17 @@ func MultiSelect(title string, opts []Option, preselected []string) ([]string, e
 		hopts = append(hopts, h)
 	}
 	var chosen []string
-	err := huh.NewMultiSelect[string]().Title(title).Options(hopts...).Value(&chosen).Run()
+	err := huh.NewMultiSelect[string]().
+		Title(title).
+		Description("space toggles an entry, enter confirms the ticked ones").
+		Options(hopts...).
+		Validate(func(v []string) error {
+			if len(v) == 0 {
+				return errors.New("tick at least one entry with space, then press enter")
+			}
+			return nil
+		}).
+		Value(&chosen).Run()
 	return chosen, err
 }
 
