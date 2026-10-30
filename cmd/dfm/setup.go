@@ -101,14 +101,25 @@ func (a *app) setupInteractive() error {
 	}
 
 	ui.Section(fmt.Sprintf("Set up this machine  (2/3)  Roles for persona %q", choice))
-	pre := a.state.Personas[choice]
-	if len(pre) == 0 {
+	installed := a.state.Personas[choice]
+	if len(installed) > 0 {
+		ui.Report("info", "installed for %s: %s", choice, strings.Join(installed, ", "))
+	}
+	ui.Report("info", "tick what this run should do; unticked roles stay exactly as they are")
+	hint := func(role, text string) string {
+		if contains(installed, role) {
+			return "installed, tick to refresh"
+		}
+		return text
+	}
+	var pre []string
+	if len(installed) == 0 {
 		pre = []string{roles.Github}
 	}
-	chosen, err := ui.MultiSelect("Roles", []ui.Option{
-		{Key: roles.Github, Label: "github", Hint: "pull and push repos with the GitHub key"},
-		{Key: roles.Client, Label: "client", Hint: "ssh into your machines with the admin key"},
-		{Key: roles.Server, Label: "server", Hint: "let the admin key log in to this machine"},
+	chosen, err := ui.MultiSelect("Run now", []ui.Option{
+		{Key: roles.Github, Label: "github", Hint: hint(roles.Github, "pull and push repos with the GitHub key")},
+		{Key: roles.Client, Label: "client", Hint: hint(roles.Client, "ssh into your machines with the admin key")},
+		{Key: roles.Server, Label: "server", Hint: hint(roles.Server, "let the admin key log in to this machine")},
 		{Key: roles.Dotfiles, Label: "dotfiles", Hint: "clone and install your dotfiles (needs github)"},
 	}, pre)
 	if err != nil {

@@ -25,11 +25,10 @@ func (c *Context) Dotfiles() error {
 	}
 	target = expandHome(target, c.Paths.Home)
 	if !c.State.HasRole(Github) && strings.HasPrefix(repo, "git@") {
-		https := "https://" + strings.TrimSuffix(strings.Replace(strings.TrimPrefix(repo, "git@"), ":", "/", 1), ".git")
-		if !c.confirm(fmt.Sprintf("No github role on this machine. Clone read-only via %s instead?", https), true) {
+		if !c.confirm(fmt.Sprintf("No github role on this machine. Clone read-only via %s instead?", httpsOf(repo)), true) {
 			return errors.New("dotfiles skipped")
 		}
-		repo = https
+		repo = httpsOf(repo)
 	}
 	git := func(args ...string) *exec.Cmd {
 		cmd := exec.Command("git", args...)
@@ -41,10 +40,21 @@ func (c *Context) Dotfiles() error {
 		}
 		return cmd
 	}
+	https := httpsOf(repo)
 	if _, err := os.Stat(filepath.Join(target, ".git")); err == nil {
 		c.report(OK, "%s already exists, pulling", target)
 		if out, err := git("-C", target, "pull", "--ff-only", "--quiet").CombinedOutput(); err != nil {
-			c.report(Warn, "git pull: %s", firstLine(string(out)))
+			// Without an agent a protected key cannot be used here; a public
+			// repo can still be read over https for this one pull.
+			if https != "" && https != repo {
+				if out2, err2 := git("-C", target, "pull", "--ff-only", "--quiet", https, "HEAD").CombinedOutput(); err2 == nil {
+					c.report(OK, "pulled over https (ssh key not usable in this run)")
+				} else {
+					c.report(Warn, "git pull: %s; https: %s", firstLine(string(out)), firstLine(string(out2)))
+				}
+			} else {
+				c.report(Warn, "git pull: %s", firstLine(string(out)))
+			}
 		}
 		if out, err := git("-C", target, "submodule", "update", "--init", "--recursive", "--quiet").CombinedOutput(); err != nil {
 			c.report(Warn, "git submodule update: %s", strings.TrimSpace(string(out)))
@@ -58,9 +68,20 @@ func (c *Context) Dotfiles() error {
 		cmd := git("clone", "--quiet", "--recurse-submodules", repo, target)
 		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("git clone %s: %w", repo, err)
+			if https == "" || https == repo {
+				return fmt.Errorf("git clone %s: %w", repo, err)
+			}
+			cmd = git("clone", "--quiet", "--recurse-submodules", https, target)
+			cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("git clone %s and %s failed: %w", repo, https, err)
+			}
+			// Keep the ssh remote so pushes work once the agent holds the key.
+			_ = exec.Command("git", "-C", target, "remote", "set-url", "origin", repo).Run()
+			c.report(OK, "cloned over https (ssh key not usable in this run), origin set to %s", repo)
+		} else {
+			c.report(OK, "cloned %s to %s", repo, target)
 		}
-		c.report(OK, "cloned %s to %s", repo, target)
 	}
 	for _, pkg := range c.Vault.Config.Dotfiles.Packages {
 		if _, err := exec.LookPath(pkg); err == nil {
@@ -188,6 +209,16 @@ func (c *Context) installPackage(name string) error {
 	}
 	c.report(OK, "%s installed", name)
 	return nil
+}
+
+// httpsOf turns git@host:owner/repo.git into https://host/owner/repo.git;
+// other URLs are returned unchanged.
+func httpsOf(repo string) string {
+	if !strings.HasPrefix(repo, "git@") {
+		return repo
+	}
+	hostPath := strings.Replace(strings.TrimPrefix(repo, "git@"), ":", "/", 1)
+	return "https://" + hostPath
 }
 
 func firstLine(s string) string {

@@ -50,3 +50,12 @@ func TestGitIdentityFile(t *testing.T) {
 		t.Fatalf("symlink: %s", got)
 	}
 }
+
+func TestHttpsOf(t *testing.T) {
+	if got := httpsOf("git@github.com:JonasHess/dotfiles.git"); got != "https://github.com/JonasHess/dotfiles.git" {
+		t.Fatal(got)
+	}
+	if got := httpsOf("https://x/y.git"); got != "https://x/y.git" {
+		t.Fatal(got)
+	}
+}
