@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -119,7 +120,61 @@ func (c *Context) Dotfiles() error {
 		return fmt.Errorf("install command failed: %w", err)
 	}
 	c.report(OK, "dotfiles installed")
+	c.offerLoginShell()
 	return nil
+}
+
+// offerLoginShell switches the login shell to zsh when the dotfiles brought
+// a ~/.zshrc and the account still logs in to another shell. Without this
+// the stowed shell config never runs and the setup looks broken.
+func (c *Context) offerLoginShell() {
+	if _, err := os.Stat(filepath.Join(c.Paths.Home, ".zshrc")); err != nil {
+		return
+	}
+	zsh, err := exec.LookPath("zsh")
+	if err != nil {
+		c.report(Info, "~/.zshrc is in place but zsh is not installed; add \"zsh\" to [dotfiles] packages in vault.toml")
+		return
+	}
+	current := loginShell(c.Plat.User)
+	if current == zsh || filepath.Base(current) == "zsh" {
+		return
+	}
+	if !c.confirm(fmt.Sprintf("Login shell of %s is %s. Switch it to %s so the dotfiles take effect?", c.Plat.User, current, zsh), true) {
+		return
+	}
+	var cmd *exec.Cmd
+	switch {
+	case c.Plat.IsRoot:
+		cmd = exec.Command("chsh", "-s", zsh, c.Plat.User)
+	case c.Plat.HasSudo:
+		cmd = exec.Command("sudo", "chsh", "-s", zsh, c.Plat.User)
+	default:
+		cmd = exec.Command("chsh", "-s", zsh)
+	}
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		c.report(Warn, "could not change the login shell: %v", err)
+		return
+	}
+	c.report(OK, "login shell of %s set to %s (takes effect at next login)", c.Plat.User, zsh)
+}
+
+func loginShell(account string) string {
+	if runtime.GOOS == "darwin" {
+		out, _ := exec.Command("dscl", ".", "-read", "/Users/"+account, "UserShell").Output()
+		f := strings.Fields(string(out))
+		if len(f) == 2 {
+			return f[1]
+		}
+		return ""
+	}
+	out, _ := exec.Command("getent", "passwd", account).Output()
+	parts := strings.Split(strings.TrimSpace(string(out)), ":")
+	if len(parts) >= 7 {
+		return parts[6]
+	}
+	return ""
 }
 
 // Stow phrases conflicts differently across versions: 2.3 says "existing
