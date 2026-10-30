@@ -61,6 +61,8 @@ owner = %q
 repo = %q
 target = "~/repos/dotfiles"
 install = %q
+# Commands the dotfiles need; each is installed with the system package manager when missing.
+packages = ["zsh", "stow"]
 
 [legacy]
 # What "Clean up old keys" looks for on machines set up before dfm.

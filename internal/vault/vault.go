@@ -22,9 +22,10 @@ type Config struct {
 		Owner string `toml:"owner"` // GitHub account the keys belong to
 	} `toml:"vault"`
 	Dotfiles struct {
-		Repo    string `toml:"repo"`    // ssh clone URL
-		Target  string `toml:"target"`  // checkout directory, ~ allowed
-		Install string `toml:"install"` // command run inside the checkout after cloning
+		Repo     string   `toml:"repo"`     // ssh clone URL
+		Target   string   `toml:"target"`   // checkout directory, ~ allowed
+		Install  string   `toml:"install"`  // command run inside the checkout after cloning
+		Packages []string `toml:"packages"` // packages the dotfiles need, installed before Install runs
 	} `toml:"dotfiles"`
 	Legacy struct {
 		AuthorizedKeysComments []string `toml:"authorized_keys_comments"`

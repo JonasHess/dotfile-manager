@@ -36,6 +36,11 @@ func (c *Context) Dotfiles() error {
 		if out, err := exec.Command("git", "-C", target, "pull", "--ff-only", "--quiet").CombinedOutput(); err != nil {
 			c.report(Warn, "git pull: %s", strings.TrimSpace(string(out)))
 		}
+		if out, err := exec.Command("git", "-C", target, "submodule", "update", "--init", "--recursive", "--quiet").CombinedOutput(); err != nil {
+			c.report(Warn, "git submodule update: %s", strings.TrimSpace(string(out)))
+		} else {
+			c.report(OK, "submodules up to date")
+		}
 	} else {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
@@ -46,6 +51,14 @@ func (c *Context) Dotfiles() error {
 			return fmt.Errorf("git clone %s: %w", repo, err)
 		}
 		c.report(OK, "cloned %s to %s", repo, target)
+	}
+	for _, pkg := range c.Vault.Config.Dotfiles.Packages {
+		if _, err := exec.LookPath(pkg); err == nil {
+			continue
+		}
+		if err := c.installPackage(pkg); err != nil {
+			c.report(Warn, "%s not installed: %v", pkg, err)
+		}
 	}
 	install := c.Vault.Config.Dotfiles.Install
 	if install == "" {
