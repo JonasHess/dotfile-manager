@@ -83,6 +83,22 @@ func TestTamperedPublicKeyDetected(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	v := newVault(t)
+	if _, err := Create(v, "gone", []byte("pw"), "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Delete(v, "gone", []byte("wrong")); err == nil {
+		t.Fatal("delete with wrong passphrase accepted")
+	}
+	if err := Delete(v, "gone", []byte("pw")); err != nil {
+		t.Fatal(err)
+	}
+	if names, _ := v.List(); len(names) != 0 {
+		t.Fatalf("still listed: %v", names)
+	}
+}
+
 func TestValidateName(t *testing.T) {
 	for _, ok := range []string{"private", "work", "a1", "my-persona"} {
 		if err := ValidateName(ok); err != nil {

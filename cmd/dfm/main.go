@@ -37,11 +37,12 @@ Usage:
   dfm setup --persona NAME --roles github,client,server,dotfiles
             [--protected|--unprotected] [--accounts root,user] [--harden]
             [--git-name NAME --git-email MAIL] [--default-github]
-  dfm persona list|new|verify|rotate|passphrase|publish [NAME]
+  dfm persona list|new|verify|rotate|passphrase|delete|publish [NAME]
   dfm cleanup [--remove]                         find (and remove, with backups) legacy keys
   dfm doctor                                     health and lock-out checks
   dfm guard [--staged] [FILE...]                 secret guard (pre-commit, CI)
   dfm vault init DIR [--owner USER] [--dotfiles-repo URL]   create a new vault
+  dfm update                                     replace this binary with the latest release
   dfm version
 
 The vault is taken from --vault, $DFM_VAULT, the last used vault, or
@@ -85,6 +86,8 @@ func run(args []string) error {
 		return cmdGuard(rest)
 	case "vault":
 		return cmdVault(rest)
+	case "update":
+		return cmdUpdate()
 	case "help", "-h", "--help":
 		usage()
 		return nil

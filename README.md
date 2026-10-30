@@ -8,7 +8,7 @@ dfm is the tool. Your vault is a separate repository that holds only personas an
 
 - A **persona** is a pair of ed25519 keys, one for GitHub and one admin key for your machines, stored in `personas/<name>/bundle.age`. The bundle is encrypted with [age](https://age-encryption.org) using an scrypt passphrase. Public keys and metadata sit next to it in plaintext.
 - Personas are independent. A `work` persona and a `private` persona have different keys and passphrases, and a machine can carry either or both.
-- **Roles** are applied per machine: `github` installs the GitHub key and pins GitHub's host keys, `client` installs the admin key for `ssh` to your machines, `server` puts the admin public key into `authorized_keys` and takes care of sshd, `dotfiles` clones and installs your dotfiles repo.
+- **Roles** are applied per machine: `github` installs the GitHub key and pins GitHub's host keys, `client` installs the admin key for `ssh` to your machines, `server` puts the admin public key into `authorized_keys` and takes care of sshd, `dotfiles` clones your dotfiles repo, installs the packages listed in `vault.toml`, moves conflicting files to backup and runs the install command.
 - A **secret guard** runs in the vault's pre-commit hook and CI. It refuses private key material, bundles that are not age ciphertext, and unexpected files under `personas/`.
 
 ## New machine
@@ -44,10 +44,11 @@ Creating a persona generates the keys, encrypts the bundle, verifies it by decry
 ## Everything has a flag
 
     dfm setup --persona private --roles github,client,server --unprotected --accounts root --yes
-    dfm persona list | new NAME | verify NAME | rotate NAME | passphrase NAME
+    dfm persona list | new NAME | verify NAME | rotate NAME | passphrase NAME | delete NAME
     dfm cleanup [--remove]
     dfm doctor
     dfm guard [--staged] [FILE...]
+    dfm update
 
 Passphrases are never taken from flags or environment variables. Scripts can pass `--passphrase-fd N` to read them from a file descriptor.
 
@@ -68,6 +69,12 @@ Passphrases are never taken from flags or environment variables. Scripts can pas
     ~/.local/share/dfm/vault                   checkout of your vault
 
 A second persona with the `github` role gets a `github.com-<persona>` host alias; use `git@github.com-work:org/repo.git` as the remote for that persona's repos.
+
+## Update
+
+    dfm update
+
+downloads the latest release for this machine, verifies the checksum and replaces the running binary. Rerunning the install one-liner does the same.
 
 ## Build
 

@@ -201,6 +201,19 @@ func writeNew(v *vault.Vault, name string, passphrase []byte, toolVersion string
 	return u, nil
 }
 
+// Delete removes a persona from the vault after checking the passphrase, so
+// nobody deletes a persona they cannot open. It never touches git.
+func Delete(v *vault.Vault, name string, passphrase []byte) error {
+	p, err := v.Load(name)
+	if err != nil {
+		return err
+	}
+	if _, err := Unlock(p, passphrase); err != nil {
+		return err
+	}
+	return os.RemoveAll(p.Dir)
+}
+
 func retiredOf(p *vault.Persona) []string {
 	if r := p.Env["retired"]; r != "" {
 		return strings.Split(r, ",")

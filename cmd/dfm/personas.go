@@ -47,6 +47,8 @@ func (a *app) cmdPersona(args []string) error {
 		return a.personaPassphrase(name)
 	case "publish":
 		return a.publish(name, "update persona files")
+	case "delete":
+		return a.personaDelete(name)
 	}
 	return fmt.Errorf("unknown persona command %q", sub)
 }
@@ -63,6 +65,7 @@ func (a *app) personasMenu() error {
 			{Key: "verify", Label: "Verify a persona", Hint: "decrypt and compare with the public keys"},
 			{Key: "rotate", Label: "Rotate keys", Hint: "new keys, old ones marked retired for cleanup"},
 			{Key: "passphrase", Label: "Change passphrase", Hint: "re-encrypt, keys unchanged"},
+			{Key: "delete", Label: "Delete persona", Hint: "remove from vault and from this machine"},
 			{Key: "back", Label: "Back"},
 		})
 		if err != nil || choice == "back" {
@@ -83,6 +86,8 @@ func (a *app) personasMenu() error {
 				err = a.personaRotate(name)
 			case "passphrase":
 				err = a.personaPassphrase(name)
+			case "delete":
+				err = a.personaDelete(name)
 			}
 		}
 		if err != nil {
@@ -285,6 +290,77 @@ func (a *app) personaPassphrase(name string) error {
 	ui.Report("ok", "bundle re-encrypted with the new passphrase")
 	if a.ctx.Confirm != nil {
 		return a.publishWith(u, fmt.Sprintf("persona %s - change passphrase", name))
+	}
+	return nil
+}
+
+// personaDelete removes a persona from the vault and from this machine,
+// then offers to publish the removal. The GitHub key and other machines
+// are the user's job and are spelled out.
+func (a *app) personaDelete(name string) error {
+	if name == "" {
+		return errors.New("persona delete needs a NAME")
+	}
+	p, err := a.vault.Load(name)
+	if err != nil {
+		return err
+	}
+	_, pass, err := a.unlock(p)
+	if err != nil {
+		return err
+	}
+	ui.Section(fmt.Sprintf("Delete persona %q", name))
+	ui.Report("warn", "other machines keep this persona's keys and still trust its admin key until you run cleanup there")
+	ui.Report("warn", "the GitHub key %s must be removed by hand at https://github.com/settings/keys", p.Env["github_fingerprint"])
+	if a.ctx.Confirm != nil && !ui.Confirm(fmt.Sprintf("Delete %q from the vault and from this machine?", name), false) {
+		return errors.New("cancelled")
+	}
+	if err := a.ctx.RemovePersona(name, p.AdminPub); err != nil {
+		return err
+	}
+	if err := persona.Delete(a.vault, name, pass); err != nil {
+		return err
+	}
+	ui.Report("ok", "%s removed from the vault", filepath.Join(a.vault.PersonasDir(), name))
+	if err := a.save(); err != nil {
+		return err
+	}
+	if a.ctx.Confirm != nil {
+		return a.publishRemoval(name)
+	}
+	return nil
+}
+
+// publishRemoval commits the deleted persona directory and offers a push.
+func (a *app) publishRemoval(name string) error {
+	rel := "personas/" + name
+	message := fmt.Sprintf("persona %s - delete", name)
+	fmt.Printf("\n commit message:  %s\n\n", message)
+	choice, err := ui.Select("Publish", []ui.Option{
+		{Key: "push", Label: "Commit and push now"},
+		{Key: "commit", Label: "Commit only, I push myself"},
+		{Key: "none", Label: "Do nothing, I handle git myself"},
+	})
+	if err != nil || choice == "none" {
+		return nil
+	}
+	git := func(args ...string) error {
+		cmd := exec.Command("git", append([]string{"-C", a.vault.Dir}, args...)...)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		return cmd.Run()
+	}
+	if err := git("add", "-A", "--", rel); err != nil {
+		return err
+	}
+	if err := git("commit", "--quiet", "-m", message, "--", rel); err != nil {
+		return fmt.Errorf("git commit: %w", err)
+	}
+	ui.Report("ok", "committed")
+	if choice == "push" {
+		if err := git("push", "--quiet", "origin", "HEAD"); err != nil {
+			return fmt.Errorf("git push: %w", err)
+		}
+		ui.Report("ok", "pushed")
 	}
 	return nil
 }
