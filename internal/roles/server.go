@@ -165,8 +165,19 @@ func (c *Context) Harden(personaName, adminFingerprint string, accounts []string
 }
 
 // ProvenLogin looks for an accepted publickey login with the fingerprint in
-// the journal or the auth log within the window.
+// the journal, the auth log or the macOS unified log within the window.
 func ProvenLogin(fingerprint string, window time.Duration) (string, bool) {
+	// macOS has neither a journal nor an auth log; sshd logs accepted logins
+	// to the unified log at info level, which `log show` hides without --info.
+	if runtime.GOOS == "darwin" {
+		out, err := exec.Command("/usr/bin/log", "show", "--last", fmt.Sprintf("%dm", int(window.Minutes())),
+			"--info", "--predicate", `process BEGINSWITH "sshd"`).Output()
+		if err == nil {
+			if when, ok := scanAccepted(string(out), fingerprint); ok {
+				return when, true
+			}
+		}
+	}
 	since := fmt.Sprintf("-%dmin", int(window.Minutes()))
 	if _, err := exec.LookPath("journalctl"); err == nil {
 		out, err := exec.Command("journalctl", "--no-pager", "-o", "short-iso", "--since", since, "-u", "ssh", "-u", "sshd", "-t", "sshd").Output()
@@ -212,6 +223,13 @@ func scanAccepted(log, fingerprint string) (string, bool) {
 		return "", false
 	}
 	f := strings.Fields(last)
+	// The unified log separates date and time with a space; journal and
+	// auth log timestamps are a single ISO field.
+	if len(f) > 1 {
+		if _, err := time.Parse("2006-01-02", f[0]); err == nil {
+			return f[0] + " " + f[1], true
+		}
+	}
 	if len(f) > 0 {
 		return f[0], true
 	}
